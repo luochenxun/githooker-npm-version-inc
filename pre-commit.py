@@ -10,20 +10,16 @@ import collections
 import json
 
 ''' ---------- Hook method ---------- '''
-pCommitTime = ''     # git commit time
+pCommitMessage = ''  # git commit message
+pProjectName = ''    # the git-project's name(for https://https://github.com/xx/usefulTool.git is usefulTool)
+pProjectPath = ''    # the git-project's path
 
 
-# @param project:
-#          {
-#            "name":"projectName",  // the name of the project
-#            "path":"/xx/xx/xx",    // the path of the project
-#            "msgReg":"",           // the regular expression to match the commit message
-#            "msgRegTips":"",       // the message to show by the invalid commit message
-#          }
-def hook(project):
+def hook():
+    global pCommitMessage, pProjectName, pProjectPath
     # read the package.json
     # read the package's version
-    packageJsonFile = project["path"] + "/package.json"
+    packageJsonFile = pProjectPath + "/package.json"
     packageJsonReader = open(packageJsonFile)
     try:
         configText = packageJsonReader.read()
@@ -36,9 +32,19 @@ def hook(project):
     # increate the version
     versionStr = pConfig["version"]
     versionSplit = versionStr.split('.')
-    subVersionNum = int(versionSplit[len(versionSplit)-1])
-    versionSplit[len(versionSplit)-1] = str(subVersionNum+1)
-    pConfig["version"] = ('.').join(versionSplit)
+    # subVersionNum = int(versionSplit[len(versionSplit)-1])
+
+    lastVersionStr = versionSplit[len(versionSplit)-1]
+    m = re.match("\d+(\D+)\d+",lastVersionStr)
+    if m and len(m.groups()) > 0:
+        buildDivide = m.group(1)
+        subVersionNum = int(lastVersionStr.split(buildDivide)[1]) + 1
+        versionSplit[len(versionSplit)-1] = lastVersionStr.split(buildDivide)[0]
+        pConfig["version"] = (('.').join(versionSplit) + buildDivide + str(subVersionNum))
+    else:
+        subVersionNum = int(versionSplit[len(versionSplit)-1])
+        versionSplit[len(versionSplit)-1] = str(subVersionNum+1)
+        pConfig["version"] = ('.').join(versionSplit)
 
     # write back to package.json
     packageJsonWritter = open(packageJsonFile, 'w')
@@ -62,7 +68,11 @@ def hook(project):
 
 # init some global variables of git environment
 def _initGitInfo():
-    None
+    global pCommitMessage, pProjectName, pProjectPath
+    pCommitMessage = os.popen('git log -1 --pretty=format:"%s"').read()
+    pProjectName = os.popen("git remote -v | sed -n \'1 s|\(.*\)/\(.*\).git\(.*\)|\\2|g p\'").read().replace("\n", "")
+    pProjectPath = os.popen("pwd").read().replace("\n", "")
+
 
 def _pass():
     os._exit(0)
@@ -71,12 +81,15 @@ def _failed():
     os._exit(1)
 
 
-def loadProject(obj_str):
-  return pickle.loads(base64.decodestring(obj_str))
+def _loadArgs(args_str):
+    """ use to pass param through scripts """
+    return pickle.loads(base64.decodestring(args_str))
+
 
 def main():
     _initGitInfo()
-    hook(loadProject(sys.argv[1]))
+    hook()
+
 
 if __name__ == "__main__":
     main()
